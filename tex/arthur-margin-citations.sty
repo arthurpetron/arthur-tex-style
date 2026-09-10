@@ -3,16 +3,11 @@
 
 \RequirePackage{etoolbox}
 \RequirePackage{xparse}
-\RequirePackage{marginnote}
+\RequirePackage{tex/arthur-margins}
 
 % Compact biblatex-based margin citations. This package intentionally does not
 % load biblatex; the document should choose its own bibliography style/backend.
 \makeatletter
-\newdimen\arthur@margin@used
-\newcount\arthur@margin@page
-\newbox\arthur@margin@box
-\arthur@margin@page=-1\relax
-
 \newcommand{\arthur@check@biblatex}{%
   \@ifpackageloaded{biblatex}{}{%
     \PackageError{arthur-margin-citations}{\string\shortcite\space requires biblatex}{%
@@ -20,27 +15,6 @@
       \string\usepackage[style=mla]{biblatex} (with csquotes and babel).%
     }%
   }%
-}
-
-\newcommand{\arthur@margin@record}[2]{%
-  \setbox\arthur@margin@box=\vbox{%
-    \hsize=\marginparwidth
-    \footnotesize
-    \raggedright
-    #2\par
-  }%
-  \ifnum\value{page}=\arthur@margin@page\relax
-  \else
-    \global\arthur@margin@page=\value{page}\relax
-    \global\arthur@margin@used=0pt\relax
-  \fi
-  \global\advance\arthur@margin@used by \dimexpr\ht\arthur@margin@box+\dp\arthur@margin@box+\baselineskip\relax
-  \ifdim\ht\arthur@margin@box>.22\textheight
-    \PackageWarning{arthur-margin-citations}{Margin note for #1 is tall; consider shortening it}%
-  \fi
-  \ifdim\arthur@margin@used>.72\textheight
-    \PackageWarning{arthur-margin-citations}{Margin notes on page \thepage\space may be overfull after #1}%
-  \fi
 }
 
 % The margin entry is rendered by biblatex's own bibliography driver, so it is a
@@ -79,7 +53,13 @@
       {\arthur@forget@lasthash}% see below
       % \finentry supplies the terminal period the reference list puts on every
       % entry; \usedriver alone stops at the last field.
-      {\usedriver{}{\thefield{entrytype}}\finentry}%
+      % On a clean first pass the bibliography data does not exist yet, so
+      % entrytype is empty and \usedriver would call an undefined driver and
+      % abort the run. Print nothing until the data is there; the rerun that
+      % biblatex asks for fills it in.
+      {\iffieldundef{entrytype}
+        {}
+        {\usedriver{}{\thefield{entrytype}}\finentry}}%
       {\multicitedelim}
       {\arthur@forget@lasthash}%
   }{}%
@@ -115,7 +95,6 @@
     \IfNoValueTF{#1}
       {\IfNoValueTF{#3}{\autocite{#2}}{\autocite[#3]{#2}}}
       {\IfNoValueTF{#3}{\autocite[#1][]{#2}}{\autocite[#1][#3]{#2}}}%
-    \arthur@margin@record{shortcite `#2'}{\arthur@shortcite@text{#2}}%
     \marginnote{\arthur@shortcite@text{#2}}%
   }%
 }{%

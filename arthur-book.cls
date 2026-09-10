@@ -325,6 +325,9 @@
 \makeatother
 \normalmarginpar
 
+% arthur-margins first: notation, citations and figures all place margin
+% material, and they must share its queue.
+\RequirePackage{tex/arthur-margins}
 \RequirePackage{tex/arthur-symbols}
 \RequirePackage{tex/arthur-math}
 \RequirePackage{tex/arthur-notation}

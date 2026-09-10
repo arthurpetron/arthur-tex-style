@@ -33,8 +33,12 @@
     \end{figure}%
   }
 
+% \arthurmarginnote, not \marginpar: margin figures then share one queue with
+% margin notes and citations, so a figure and a note anchored to nearby lines
+% stack instead of overprinting. It also makes marginfigure legal inside a float
+% or a footnote, which \marginpar is not.
 \NewEnviron{marginfigure}{%
-  \marginpar{%
+  \arthurmarginnote{%
     \begin{minipage}{\marginparwidth}%
     \footnotesize
     \captionsetup{type=figure,font=footnotesize,labelfont=bf}%

@@ -1,0 +1,204 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{tex/arthur-margins}[2026/09/10 Stacked margin notes]
+
+%% One queue for every piece of margin material, so notes, citations, keys and
+%% margin figures cannot overprint each other.
+%%
+%% marginnote places a note at the vertical position of its anchor and does no
+%% bookkeeping, so two anchors on the same line put two notes in the same place.
+%% LaTeX's \marginpar does stack, but only against other \marginpars, and it is
+%% illegal inside floats, footnotes and math — which is why this class uses
+%% marginnote in the first place.
+%%
+%% How this works. A note's true position on the page is not known while it is
+%% being typeset: it depends on where the page eventually breaks. So each anchor
+%% drops a zref label recording its page and vertical position, which becomes
+%% readable on the next run. Armed with that, the engine walks the notes in
+%% document order, keeps the bottom edge reached so far on the current page, and
+%% pushes a note down by exactly the overlap when its natural top would land
+%% above that edge.
+%%
+%% This converges in two runs and stays converged: pushing a note down moves no
+%% anchor, because margin material is set with \rlap and contributes nothing to
+%% the main vertical list. latexmk reruns on its own while the labels move.
+%%
+%% Provides: \arthurmarginnote[<left text>]{<text>}[<extra offset>]
+%%           \arthurmarginsep  — minimum gap between stacked items
+%%           \arthurmarginfoot — warn below this y coordinate on the page
+
+\RequirePackage{etoolbox}
+\RequirePackage{xparse}
+\RequirePackage{marginnote}
+\RequirePackage{zref-savepos}
+\RequirePackage{zref-abspage}
+
+% ---------------------------------------------------------------- configuration
+% Both defaults are relative to \baselineskip, which is 0pt while the preamble
+% is being read — so they are resolved at \begin{document}, and a value set in
+% the preamble is left alone.
+\newlength{\arthurmarginsep}
+
+% Stacking pushes downward, so a page carrying too much margin material will
+% eventually run out of page. The engine cannot fix that by moving things — the
+% fix is fewer or shorter items — so it warns instead. This is the y coordinate,
+% measured up from the foot of the paper, below which material is too low.
+\newlength{\arthurmarginfoot}
+
+\AtBeginDocument{%
+  \ifdim\arthurmarginsep=\z@  \setlength{\arthurmarginsep}{0.7\baselineskip}\fi
+  \ifdim\arthurmarginfoot=\z@ \setlength{\arthurmarginfoot}{2\baselineskip}\fi}
+
+% ------------------------------------------------------------------- machinery
+\makeatletter
+
+\zref@newlist{arthurmargin}
+\zref@addprops{arthurmargin}{abspage,posy}
+
+\newcounter{arthur@mn@anchor}
+
+\newcount\arthur@mn@page   \global\arthur@mn@page=\m@ne
+\newdimen\arthur@mn@bottom
+\newdimen\arthur@mn@top
+\newdimen\arthur@mn@limit
+\newdimen\arthur@mn@shift
+\newdimen\arthur@mn@height
+\newsavebox{\arthur@mn@measure}
+\newif\ifarthur@mn@rerun
+
+% A y coordinate above the top of any page, so the first note on a page is never
+% pushed. zref's posy grows upward from the bottom-left of the paper.
+\newdimen\arthur@mn@sky   \arthur@mn@sky=16000pt
+
+% Counters that must survive the measuring pass. Measuring means typesetting the
+% note once to find its height, and a \caption inside a marginfigure would
+% otherwise step the float counter twice — once measured, once placed — leaving a
+% gap in the figure numbering. Extend this list if a margin item ever steps a
+% counter not named here.
+\newcommand{\arthurmargincounters}{figure,table,equation,footnote,mpfootnote}
+
+% Each counter's value is stashed in its own macro and put back from there.
+%
+% The obvious implementation — accumulating "\setcounter{c}{n}" into a token list
+% with \xdef and \noexpand — does not work: calc makes \setcounter a *robust*
+% command, so \noexpand protects only its outer shell and the list ends up
+% holding calc's internals, which then execute while the list is being built.
+%
+% \docsvlist rather than \@for, because \@for does not expand a macro holding
+% the list and the whole comma list arrives as a single item.
+\newcommand{\arthur@mn@save}[1]{%
+  \@ifundefined{c@#1}{}{%
+    \expandafter\xdef\csname arthur@mn@ctr@#1\endcsname{\the\value{#1}}}}
+
+\newcommand{\arthur@mn@restoreone}[1]{%
+  \@ifundefined{arthur@mn@ctr@#1}{}{%
+    \setcounter{#1}{\csname arthur@mn@ctr@#1\endcsname}}}
+
+\newcommand{\arthur@mn@walk}[1]{%
+  \begingroup
+    \let\do#1%
+    \expandafter\docsvlist\expandafter{\arthurmargincounters}%
+  \endgroup}
+
+\newcommand{\arthur@mn@snapshot}{\arthur@mn@walk{\arthur@mn@save}}
+\newcommand{\arthur@mn@restore}{\arthur@mn@walk{\arthur@mn@restoreone}}
+
+% Measure the note exactly as marginnote will set it, or the stack is computed
+% from the wrong height. Note that \marginnotetextwidth is NOT the note's width:
+% it is \textwidth, used as a horizontal kern to skip past the text column. The
+% content is set at \marginparwidth, with \marginfont, a leading \strut, and
+% ragged edges — all mirrored here.
+%
+% The box and the height are set \global because the group that protects the
+% counters would otherwise discard both.
+\newcommand{\arthur@mn@measurebox}[1]{%
+  \arthur@mn@snapshot
+  \begingroup
+    % \setbox, not \sbox: with calc loaded, \global in front of the LaTeX
+    % wrapper confuses its length scanner.
+    \global\setbox\arthur@mn@measure\hbox{%
+      \vbox{%
+        \hsize\marginparwidth
+        \linewidth\hsize
+        \@ifundefined{mn@parboxrestore}{}{\mn@parboxrestore}%
+        \marginfont\raggedrightmarginnote\strut\hspace{\z@}%
+        \ignorespaces#1\endgraf}}%
+  \endgroup
+  \arthur@mn@restore
+  \global\arthur@mn@height\dimexpr\ht\arthur@mn@measure+\dp\arthur@mn@measure\relax}
+
+% Given this anchor's page and natural top, decide how far down to push it.
+\newcommand{\arthur@mn@resolve}[2]{%
+  \ifnum#1=\arthur@mn@page\relax\else
+    % first item on a new page: nothing above it to clear
+    \global\arthur@mn@page=#1\relax
+    \global\arthur@mn@bottom=\arthur@mn@sky
+  \fi
+  \arthur@mn@top=#2sp\relax
+  \arthur@mn@limit=\dimexpr\arthur@mn@bottom-\arthurmarginsep\relax
+  \ifdim\arthur@mn@top>\arthur@mn@limit
+    \arthur@mn@shift=\dimexpr\arthur@mn@top-\arthur@mn@limit\relax
+    \arthur@mn@top=\arthur@mn@limit
+  \else
+    \arthur@mn@shift=\z@
+  \fi
+  \global\arthur@mn@bottom=\dimexpr\arthur@mn@top-\arthur@mn@height\relax}
+
+% Complain if the stack has run off the bottom of the text block, which stacking
+% cannot fix — the fix is fewer margin items on that page, or shorter ones.
+\newcommand{\arthur@mn@checkfoot}{%
+  \ifdim\arthur@mn@bottom<\arthurmarginfoot
+    \PackageWarning{arthur-margins}{Margin material on page
+      \the\arthur@mn@page\space has been stacked below the foot of the page;
+      use fewer or shorter margin items there}%
+  \fi}
+
+\NewDocumentCommand{\arthurmarginnote}{o m o}{%
+  \stepcounter{arthur@mn@anchor}%
+  \edef\arthur@mn@label{arthurmn@\the\value{arthur@mn@anchor}}%
+  % The label must sit at the anchor, so it records where the *text* is.
+  % \zref@savepos emits the primitive whatsit that makes posx/posy meaningful;
+  % \zref@labelbylist on its own records the page and nothing else.
+  \zref@savepos
+  \zref@labelbylist{\arthur@mn@label}{arthurmargin}%
+  \arthur@mn@measurebox{#2}%
+  \edef\arthur@mn@pg{\zref@extractdefault{\arthur@mn@label}{abspage}{0}}%
+  \edef\arthur@mn@py{\zref@extractdefault{\arthur@mn@label}{posy}{0}}%
+  % A position of zero means "not known yet", not "at the foot of the page":
+  % on the first run there is no .aux to read. Place the note where it falls,
+  % ask for a rerun, and — importantly — leave the running stack untouched, so
+  % one unknown position cannot drag every later note off the page.
+  \ifnum\arthur@mn@pg=0\relax
+    \global\arthur@mn@reruntrue
+    \arthur@mn@shift=\z@
+  \else
+    \ifnum\arthur@mn@py=0\relax
+      \global\arthur@mn@reruntrue
+      \arthur@mn@shift=\z@
+    \else
+      \arthur@mn@resolve{\arthur@mn@pg}{\arthur@mn@py}%
+      \arthur@mn@checkfoot
+    \fi
+  \fi
+  \IfNoValueTF{#3}
+    {\edef\arthur@mn@offset{\the\arthur@mn@shift}}
+    {\edef\arthur@mn@offset{\the\dimexpr\arthur@mn@shift+#3\relax}}%
+  % No \expandafter on the content: it would expand the note's first token.
+  % \arthur@mn@offset expands where marginnote uses it, in a \kern.
+  \IfNoValueTF{#1}
+    {\arthur@mn@orig{#2}[\arthur@mn@offset]}
+    {\arthur@mn@orig[#1]{#2}[\arthur@mn@offset]}%
+}
+
+% Route every \marginnote through the queue, so a note written by hand stacks
+% against a \shortcite or a margin figure without the author thinking about it.
+\let\arthur@mn@orig\marginnote
+\let\marginnote\arthurmarginnote
+
+\AtEndDocument{%
+  \ifarthur@mn@rerun
+    \PackageWarning{arthur-margins}{Margin positions are not settled;
+      rerun LaTeX to stack them}%
+  \fi}
+
+\makeatother
+\endinput

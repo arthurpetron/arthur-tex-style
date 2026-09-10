@@ -25,6 +25,7 @@ export TEXINPUTS := .:$(abspath vendor/arthur-tex-style):
 ```text
 arthur-book.cls
 tex/
+  arthur-margins.sty
   arthur-symbols.sty
   arthur-math.sty
   arthur-notation.sty
@@ -57,6 +58,8 @@ Available options:
 
 `arthur-book.cls` is the public entry point. It loads focused helper modules from `tex/`:
 
+- `arthur-margins`: one queue for all margin material, so notes, citations,
+  keys and margin figures stack instead of overprinting.
 - `arthur-symbols`: core math notation commands.
 - `arthur-math`: numbered displays, full-width equations, equation summaries, and TikZ-CD category diagrams.
 - `arthur-notation`: notation environments and margin keys.
@@ -222,6 +225,25 @@ The class provides three figure environments for the Tufte-style layout:
   \caption{Full-width figure.}
 \end{fullfigure}
 ```
+
+## Margin material
+
+Everything that goes in the margin — `\marginnote`, `\shortcite`, `\marginkey`,
+`marginfigure` — shares one queue and stacks. Two items anchored to the same line
+are pushed apart rather than printed on top of each other, and you do not have to
+space them out by hand.
+
+```tex
+\setlength{\arthurmarginsep}{0.7\baselineskip}  % gap between stacked items
+\setlength{\arthurmarginfoot}{2\baselineskip}   % warn below this height
+```
+
+Placement needs the position of each anchor on the page, which is only known once
+the page has been broken, so it is read back from the `.aux` on the next run:
+**the first run places notes unstacked and asks for a rerun**. `latexmk` handles
+that on its own. If a page carries more margin material than fits, the stack runs
+past the foot and the build warns — stacking cannot invent space, so shorten or
+move an item.
 
 ## Short Citations
 

@@ -89,6 +89,55 @@ Also: the margin entry is set `\normalfont`, so a citation inside a `theorem` or
 `definition` no longer inherits that environment's italic; and `\finentry`
 supplies the terminal period that `\usedriver` alone omits.
 
+### Added — one queue for margin material
+
+New module `tex/arthur-margins.sty`. `marginnote` places a note at its anchor and
+keeps no record of what is already there, so two anchors on the same line put two
+notes in the same place — a `\shortcite` beside a `\marginnote` simply overprinted.
+`\marginpar` does stack, but only against other `\marginpar`s, and it is illegal
+inside floats, footnotes and math, which is why this class uses `marginnote`.
+
+`\arthurmarginnote` gives every piece of margin material one queue: it walks the
+items in document order, keeps the bottom edge reached so far on the current page,
+and pushes an item down by exactly its overlap. `\marginnote` is routed through it,
+so `\shortcite`, `\marginkey`, the notation environments and hand-written notes all
+participate; `marginfigure` now uses it too instead of `\marginpar`, which also
+makes margin figures legal inside floats and footnotes.
+
+An item's true position is not known while it is typeset — it depends on where the
+page breaks — so each anchor drops a zref label and the geometry is read back on
+the next run. The first run places notes unstacked and asks for a rerun; latexmk
+does that unprompted. It converges in two runs and stays converged, because
+pushing an item down moves no anchor: margin material is set with `\rlap` and
+contributes nothing to the main vertical list.
+
+Configurable with `\arthurmarginsep` (gap between items, default
+`0.7\baselineskip`) and `\arthurmarginfoot` (warn below this, default
+`2\baselineskip`). Both resolve at `\begin{document}`, since `\baselineskip` is
+0pt while the preamble is read.
+
+Four traps met on the way, recorded because each would silently return:
+
+- `\marginnotetextwidth` is **not** the note's width — it is `\textwidth`, used as a
+  kern to skip past the text column. Content is set at `\marginparwidth`. Measuring
+  at the wrong width underestimated every height and the stack still overlapped.
+- `\zref@labelbylist` records the page but no position; `\zref@savepos` must emit
+  the primitive whatsit first. Without it every `posy` came back 0, and one zero
+  dragged the whole page's stack off the paper.
+- Measuring means typesetting, so a `\caption` inside a `marginfigure` stepped the
+  float counter twice and left a hole in the figure numbering. Counters named in
+  `\arthurmargincounters` are saved and restored around the measurement.
+- That save/restore cannot be built as a token list with `\xdef` and `\noexpand`:
+  `calc` makes `\setcounter` robust, so `\noexpand` protects only its shell and
+  calc's internals execute while the list is being built. Values are stashed in
+  per-counter macros instead.
+
+### Fixed — margin citations on a clean first pass
+
+`\shortcite` aborted the run on a first pass, before biber had produced any data:
+`entrytype` is empty then, and `\usedriver` called an undefined driver. It now
+prints nothing until the data exists.
+
 ### Unchanged, deliberately
 
 The header rule is full-bleed by design, and the page box alternates left/right by
