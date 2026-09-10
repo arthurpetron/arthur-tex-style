@@ -252,3 +252,7 @@ pdflatex -output-directory=examples/pdf examples/shortcite-demo.tex
 ```
 
 The generated PDFs will be written to `examples/pdf/`.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
