@@ -53,6 +53,42 @@ Six layout bugs in `arthur-book.cls`, all visible in any document built with it.
   margin, scoped to `wide-notes` only so the symmetric presets keep the
   conventional alternation.
 
+### Fixed — margin citations
+
+`\shortcite` produced a margin entry in a hand-assembled title-then-author order
+that matches no published style, which contradicted this module's own promise to
+leave the bibliography style to the document. It now renders the entry with
+biblatex's own bibliography driver via `\usedriver`, so the margin carries a real
+reference-list entry in whatever style the document loaded — MLA, Chicago,
+authoryear. Verified against `biblatex-mla` (MLA 9th edition).
+
+Four bugs surfaced by that change:
+
+- **Not `\fullcite`.** `biblatex-mla` redefines `\fullcite` to a title-only
+  citation, so the obvious implementation yields nothing resembling a
+  works-cited entry. `\usedriver{}{\thefield{entrytype}}` invokes the driver the
+  reference list itself uses. The driver is called *without*
+  `\DeclareNameAlias{sortname}{default}`, so the leading name stays inverted and
+  the margin entry reads exactly like its Works Cited counterpart.
+- **`\shortcite{key}[20]` came out as a bare "(20)".** The optional arguments were
+  declared `O{}`, so an argument the author omitted was passed as *empty* rather
+  than absent, and `biblatex-mla` reads a present-but-empty prenote as "the author
+  is already named in the sentence" and suppresses it. Declared `o` now, with the
+  four cases branched explicitly.
+- **The in-text citation lost its author on first use.** biblatex tracks previous
+  citations globally, and MLA legitimately shortens a repeat of the same source to
+  a page number — so rendering the margin entry *before* the citation made the
+  citation think the work had already been cited. The citation is emitted first.
+- **Repeated-author dash leaked both ways.** A margin entry whose author matched
+  the previous one printed MLA's `———.`, and the last margin entry on a page left
+  its author behind so the reference list opened with a dash instead of a name.
+  `\bbx@lasthash` and `\cbx@lasthash` are now cleared before *and* after each
+  margin entry; both are set `\global` by the style, so the reset has to be too.
+
+Also: the margin entry is set `\normalfont`, so a citation inside a `theorem` or
+`definition` no longer inherits that environment's italic; and `\finentry`
+supplies the terminal period that `\usedriver` alone omits.
+
 ### Unchanged, deliberately
 
 The header rule is full-bleed by design, and the page box alternates left/right by

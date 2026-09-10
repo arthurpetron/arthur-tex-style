@@ -17,7 +17,7 @@
   \@ifpackageloaded{biblatex}{}{%
     \PackageError{arthur-margin-citations}{\string\shortcite\space requires biblatex}{%
       Load biblatex in your document preamble, for example:
-      \string\usepackage[backend=biber,style=authoryear]{biblatex}.%
+      \string\usepackage[style=mla]{biblatex} (with csquotes and babel).%
     }%
   }%
 }
@@ -43,22 +43,80 @@
   \fi
 }
 
-\newcommand{\arthur@shortcite@text}[3]{%
+% The margin entry is rendered by biblatex's own bibliography driver, so it is a
+% real reference-list entry in whatever style the document loaded — MLA,
+% Chicago, authoryear — rather than a hand-assembled title-then-author order
+% that matches no published style and contradicts this package's promise to
+% leave the style to the document.
+%
+% Not \fullcite: biblatex-mla redefines that to a title-only citation, so it
+% yields nothing resembling a works-cited entry. \usedriver invokes the driver
+% for the entry's own type, which is what the reference list itself uses.
+%
+% The driver is called without \DeclareNameAlias{sortname}{default}, which the
+% usual inline-fullcite recipe applies to un-invert the leading name. A margin
+% entry here is a reference-list entry pulled into the margin, so it should read
+% as one: "Henderson, Peter, et al.", matching the Works Cited page exactly.
+% Both the pre- and postcode clear biblatex's record of the previously printed
+% author, which
+% the bibliography driver keeps in \bbx@lasthash (and the cite style in
+% \cbx@lasthash). Without it, a margin entry whose author matches the preceding
+% one prints MLA's repeated-author dash — "———." — which is correct in a
+% reference list and meaningless in a margin note that stands alone. Both are
+% set \global by the style, so the reset has to be global too — and it has to
+% run afterwards as well, or the last margin entry leaves its author behind and
+% the reference list opens with a dash instead of a name.
+\newcommand{\arthur@forget@lasthash}{%
+  \global\undef\bbx@lasthash
+  \global\undef\cbx@lasthash
+}
+%
+% Declared at \begin{document} because \DeclareCiteCommand needs biblatex, and
+% this package deliberately does not load it.
+\AtBeginDocument{%
+  \@ifpackageloaded{biblatex}{%
+    \DeclareCiteCommand{\arthurfullref}
+      {\arthur@forget@lasthash}% see below
+      % \finentry supplies the terminal period the reference list puts on every
+      % entry; \usedriver alone stops at the last field.
+      {\usedriver{}{\thefield{entrytype}}\finentry}%
+      {\multicitedelim}
+      {\arthur@forget@lasthash}%
+  }{}%
+}
+% \normalfont because a margin citation is not part of the sentence it hangs
+% beside: inside a theorem or a definition it would otherwise inherit that
+% environment's italic and stop reading as a reference.
+\newcommand{\arthur@shortcite@text}[1]{%
+  \normalfont
   \footnotesize
   \raggedright
-  \ifblank{#1}{}{\emph{#1}\par}%
-  \textit{\citetitle{#2}}\par
-  \citeauthor{#2}%
-  \ifblank{#3}{}{,\space #3}%
+  \arthurfullref{#1}%
 }
 
+% \shortcite[<prenote>]{<key>}[<postnote>] — the optional arguments carry
+% biblatex's own semantics and are passed through to \autocite, so a page number
+% lands in the in-text citation where a reader expects it: MLA's (Author 34).
+% \autocite rather than \cite, so parenthetical styles bracket themselves and
+% handle adjacent punctuation.
+% Optional arguments are declared with `o`, not `O{}`, so an argument the author
+% did not give is *absent* rather than empty. Passing an empty prenote is not the
+% same as passing none: biblatex-mla reads a present-but-empty prenote as "the
+% author is already named in the sentence" and suppresses it, turning
+% \shortcite{key}[20] into a bare "(20)".
 \@ifundefined{shortcite}{%
-  \NewDocumentCommand{\shortcite}{O{} m O{}}{%
+  \NewDocumentCommand{\shortcite}{o m o}{%
     \arthur@check@biblatex
-    \nocite{#2}%
-    \arthur@margin@record{shortcite `#2'}{\arthur@shortcite@text{#1}{#2}{#3}}%
-    \marginnote{\arthur@shortcite@text{#1}{#2}{#3}}%
-    \cite{#2}%
+    % The in-text citation comes first. biblatex tracks previous citations
+    % globally, and MLA legitimately shortens a repeat of the same source to a
+    % bare page number — so rendering the margin entry first made the citation
+    % that followed think the work had already been cited, and
+    % \shortcite{key}[20] came out as "(20)" with no author.
+    \IfNoValueTF{#1}
+      {\IfNoValueTF{#3}{\autocite{#2}}{\autocite[#3]{#2}}}
+      {\IfNoValueTF{#3}{\autocite[#1][]{#2}}{\autocite[#1][#3]{#2}}}%
+    \arthur@margin@record{shortcite `#2'}{\arthur@shortcite@text{#2}}%
+    \marginnote{\arthur@shortcite@text{#2}}%
   }%
 }{%
   \PackageWarning{arthur-margin-citations}{\string\shortcite\space already exists; arthur-margin-citations did not redefine it}%
