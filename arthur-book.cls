@@ -189,6 +189,10 @@
 \setlength{\arthur@headruleinset}{2pt}
 \newlength{\arthur@headrulewd}
 \setlength{\arthur@headrulewd}{0.4pt}
+% Gap left between the page-number box and the near end of the header rule, so
+% the two read as one device instead of colliding.
+\newlength{\arthur@headrulegap}
+\setlength{\arthur@headrulegap}{1pc}
 \newsavebox{\arthur@pbbox}
 \newcommand{\arthur@pagebox}{%
   \begingroup
@@ -198,21 +202,42 @@
   \endgroup
 }
 
-% ---------- Full-bleed header rule ----------
-% Runs to \arthur@headruleinset from each paper edge, with its top edge flush
-% against the bottom edge of the page-number box, so the rule and the box meet
-% exactly instead of approximately. The offset is measured from the box itself
-% (\dp) rather than guessed from \baselineskip, so it holds at any type size.
-% \rlap and the [0pt][0pt] raisebox keep the rule out of the header's height
-% calculation, so it cannot push the text block down.
-\newcommand{\arthur@headrule}{%
+% ---------- Header rule ----------
+% Runs from \arthur@headruleinset at the far trim to \arthur@headrulegap short
+% of the page-number box, whichever side the box is on, so the gap is identical
+% on every page. Its top edge is flush with the bottom edge of the box: the
+% offset is the box's measured depth (\dp), not a \baselineskip guess, so it
+% holds at any type size.
+%
+% Both macros must be emitted *first* in their header field. \rlap measures from
+% the current horizontal position, and the running-head label's width varies with
+% the section title — emitting the rule after the label made its near end wander
+% by the width of that text from page to page.
+%
+% \rlap and the [0pt][0pt] raisebox keep the rule out of the header's height, so
+% it cannot push the text block down.
+\newcommand{\arthur@headrule@width}{%
+  \dimexpr \paperwidth
+    -\arthur@pageboxinset-\wd\arthur@pbbox-\arthur@headrulegap
+    -\arthur@headruleinset\relax}
+\newcommand{\arthur@headrule@draw}[1]{%
   \sbox\arthur@pbbox{\arthur@pagebox}%
   \rlap{%
-    \hspace*{\dimexpr -\oddsidemargin-1in+\arthur@headruleinset}%
+    \hspace*{#1}%
     \raisebox{-\dimexpr\dp\arthur@pbbox+\arthur@headrulewd\relax}[0pt][0pt]{%
-      \rule{\dimexpr \paperwidth-2\arthur@headruleinset}{\arthur@headrulewd}%
+      \rule{\arthur@headrule@width}{\arthur@headrulewd}%
     }%
   }%
+}
+% Box on the left (even pages): the rule starts past the box plus the gap.
+\newcommand{\arthur@headrule@boxleft}{%
+  \sbox\arthur@pbbox{\arthur@pagebox}%
+  \arthur@headrule@draw{\dimexpr \arthur@pageboxinset+\wd\arthur@pbbox
+    +\arthur@headrulegap-\evensidemargin-1in\relax}%
+}
+% Box on the right (odd pages): the rule starts at the left trim.
+\newcommand{\arthur@headrule@boxright}{%
+  \arthur@headrule@draw{\dimexpr \arthur@headruleinset-\oddsidemargin-1in\relax}%
 }
 \newcommand{\arthur@headerlabel}{\raisebox{0.45ex}{\textsc{\small \arthur@path}}}
 
@@ -231,21 +256,21 @@
 % wide-notes geometry. Keeping one origin for both parities keeps the offsets
 % honest, and the paper-edge arithmetic is then the same on every page.
 \fancyhead[LE]{%
+  \arthur@headrule@boxleft
   % Page box inset \arthur@pageboxinset from the left paper edge.
   \makebox[0pt][l]{\hspace*{\dimexpr -\evensidemargin-1in+\arthur@pageboxinset}\arthur@pagebox}%
   \quad\arthur@headerlabel
-  \arthur@headrule
 }
 \fancyhead[LO]{%
+  \arthur@headrule@boxright
   % Page box inset \arthur@pageboxinset from the right paper edge: the origin is
-  % (\oddsidemargin+1in) from the paper's left edge, so the run to the right
-  % edge is \paperwidth minus that origin. \llap hangs the box back so its
-  % right edge, not its left, meets the 2pt inset.
+  % (\oddsidemargin+1in) from the paper's left edge, so the run to the right edge
+  % is \paperwidth minus that origin. \llap hangs the box back so its right edge,
+  % not its left, meets the inset.
   \makebox[0pt][l]{%
     \hspace*{\dimexpr \paperwidth-\oddsidemargin-1in-\arthur@pageboxinset}%
     \llap{\arthur@pagebox}}%
   \arthur@headerlabel
-  \arthur@headrule
 }
 % One path header per page: duplicating inner and outer headers makes long
 % section paths collide in the compact layouts.
