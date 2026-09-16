@@ -66,7 +66,10 @@
 
 \AtBeginDocument{%
   \ifdim\arthurmarginsep=\z@  \setlength{\arthurmarginsep}{0.7\baselineskip}\fi
-  \ifdim\arthurmarginfoot=\z@ \setlength{\arthurmarginfoot}{2\baselineskip}\fi}
+  \ifdim\arthurmarginfoot=\z@ \setlength{\arthurmarginfoot}{2\baselineskip}\fi
+  \ifdim\arthurmarginrise=\z@ \setlength{\arthurmarginrise}{0.3\textheight}\fi
+  \global\arthur@mn@ceiling=\dimexpr\paperheight-1in-\topmargin
+                                   -\headheight-\headsep\relax}
 
 % ------------------------------------------------------------------- machinery
 \makeatletter
@@ -88,6 +91,22 @@
 % A y coordinate above the top of any page, so the first note on a page is never
 % pushed. zref's posy grows upward from the bottom-left of the paper.
 \newdimen\arthur@mn@sky   \arthur@mn@sky=16000pt
+
+%% The top of the text block, in the same coordinates: no note is ever raised
+%% above it. TeX's reference point is 1in down from the paper's top edge, so the
+%% text block begins 1in + \topmargin + \headheight + \headsep below that edge,
+%% and posy counts up from the bottom.
+\newdimen\arthur@mn@ceiling
+\newdimen\arthur@mn@foot
+\newdimen\arthur@mn@need
+\newdimen\arthur@mn@room
+\newdimen\arthur@mn@rise
+
+%% A note raised further than this no longer sits beside the sentence it
+%% qualifies, which is the only reason to put it in the margin. The engine still
+%% raises it -- a readable note beside the wrong line beats half a note falling
+%% off the page -- and warns, because the real fix is a paragraph in the body.
+\newlength{\arthurmarginrise}
 
 % Counters that must survive the measuring pass. Measuring means typesetting the
 % note once to find its height, and a \caption inside a marginfigure would
@@ -147,6 +166,16 @@
   \global\arthur@mn@height\dimexpr\ht\arthur@mn@measure+\dp\arthur@mn@measure\relax}
 
 % Given this anchor's page and natural top, decide how far down to push it.
+%% Two passes over one note. First the stack: a note whose natural top would
+%% overlap the note above is pushed DOWN to clear it, which is what stops margin
+%% material overprinting. Then the rescue: a note whose foot would fall below the
+%% page is pulled UP into whatever blank space the margin has above it.
+%%
+%% The rescue is bounded twice, and both bounds matter. It never rises past the
+%% bottom of the note above (the stack would break), and never past the top of
+%% the text block (the note would climb into the header). When those bounds leave
+%% less room than the note needs, the note still overflows and the engine says
+%% so by name -- stacking cannot invent space, and neither can raising.
 \newcommand{\arthur@mn@resolve}[2]{%
   \ifnum#1=\arthur@mn@page\relax\else
     % first item on a new page: nothing above it to clear
@@ -161,15 +190,47 @@
   \else
     \arthur@mn@shift=\z@
   \fi
+  % --- rescue by raising
+  \arthur@mn@foot=\dimexpr\arthur@mn@top-\arthur@mn@height\relax
+  \arthur@mn@rise=\z@
+  \ifdim\arthur@mn@foot<\arthurmarginfoot
+    \arthur@mn@need=\dimexpr\arthurmarginfoot-\arthur@mn@foot\relax
+    \arthur@mn@room=\dimexpr\arthur@mn@limit-\arthur@mn@top\relax
+    \ifdim\arthur@mn@room>\dimexpr\arthur@mn@ceiling-\arthur@mn@top\relax
+      \arthur@mn@room=\dimexpr\arthur@mn@ceiling-\arthur@mn@top\relax
+    \fi
+    \ifdim\arthur@mn@room<\z@ \arthur@mn@room=\z@ \fi
+    \ifdim\arthur@mn@need<\arthur@mn@room
+      \arthur@mn@rise=\arthur@mn@need
+    \else
+      \arthur@mn@rise=\arthur@mn@room
+    \fi
+    \advance\arthur@mn@top by \arthur@mn@rise
+    \advance\arthur@mn@shift by -\arthur@mn@rise
+  \fi
   \global\arthur@mn@bottom=\dimexpr\arthur@mn@top-\arthur@mn@height\relax}
 
-% Complain if the stack has run off the bottom of the text block, which stacking
-% cannot fix — the fix is fewer margin items on that page, or shorter ones.
+% Two different complaints, because they have two different fixes.
+%
+% Raised far from its anchor: the note is whole and on the page, but it no longer
+% sits beside the sentence it qualifies. Advisory.
+%
+% Still below the foot: raising found less room than the note needed, so part of
+% it is off the page. No amount of stacking or raising invents space, and the fix
+% is editorial -- the note is too long for a margin and wants to be a paragraph
+% in the body. Reported as an error so it cannot ship unnoticed in a built PDF.
 \newcommand{\arthur@mn@checkfoot}{%
+  \ifdim\arthur@mn@rise>\arthurmarginrise
+    \PackageWarning{arthur-margins}{Margin note on page
+      \the\arthur@mn@page\space was raised \the\arthur@mn@rise\space to fit,
+      so it no longer sits beside its own line; consider making it a paragraph}%
+  \fi
   \ifdim\arthur@mn@bottom<\arthurmarginfoot
-    \PackageWarning{arthur-margins}{Margin material on page
-      \the\arthur@mn@page\space has been stacked below the foot of the page;
-      use fewer or shorter margin items there}%
+    \PackageError{arthur-margins}{Margin note on page
+      \the\arthur@mn@page\space does not fit above the foot, even after
+      raising}{A margin note this long belongs in the body as a paragraph.
+      Shorten it, move it into the text, or reduce the margin material on
+      this page.}%
   \fi}
 
 \NewDocumentCommand{\arthurmarginnote}{o m o}{%
