@@ -7,6 +7,16 @@
 \RequirePackage{graphicx}
 \RequirePackage{marginnote}
 
+% Fallbacks, so this package still loads on its own; arthur-margins owns the
+% scale and its \providecommand wins when the class pulls it in first.
+\providecommand{\arthurmarginsize}{\small}
+\providecommand{\arthurmargincaptionsize}{\footnotesize}
+
+% caption's font key reads a NAME, not a size command, so the scale is handed
+% over through caption's own declaration hook. Passing the macro directly makes
+% caption build a control sequence out of it and the document stops.
+\DeclareCaptionFont{arthurmargincaption}{\arthurmargincaptionsize}
+
 \newlength{\arthurfullwidth}
 \setlength{\arthurfullwidth}{\dimexpr\textwidth+\marginparsep+\marginparwidth\relax}
 
@@ -40,8 +50,11 @@
 \NewEnviron{marginfigure}{%
   \arthurmarginnote{%
     \begin{minipage}{\marginparwidth}%
-    \footnotesize
-    \captionsetup{type=figure,font=footnotesize,labelfont=bf}%
+    % The margin type scale, from arthur-margins: the figure's own text
+    % matches the margin notes around it and its caption ranks one step
+    % below, so a caption reads as belonging to the figure above it.
+    \arthurmarginsize
+    \captionsetup{type=figure,font=arthurmargincaption,labelfont=bf}%
     \centering
     \BODY
     \end{minipage}%

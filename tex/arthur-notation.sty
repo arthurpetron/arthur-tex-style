@@ -3,7 +3,14 @@
 
 \RequirePackage{marginnote}
 
-\providecommand{\marginkey}[1]{\marginnote{\footnotesize\emph{#1}}}
+% Fallbacks, so this package still loads on its own; arthur-margins owns the
+% scale and its \providecommand wins when the class pulls it in first.
+\providecommand{\arthurmarginsize}{\small}
+\providecommand{\arthurmargincaptionsize}{\footnotesize}
+
+% No size here: \marginfont already sets \arthurmarginsize, so a key matches
+% the margin notes it sits among instead of ranking below them.
+\providecommand{\marginkey}[1]{\marginnote{\emph{#1}}}
 
 \newenvironment{arthurnotation}
   {\begin{quote}\small\noindent\textbf{Notation.}\ }

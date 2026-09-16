@@ -1,6 +1,11 @@
 \NeedsTeXFormat{LaTeX2e}
 \ProvidesPackage{tex/arthur-margin-citations}[2026/04/25 Compact margin citations]
 
+% Fallbacks, so this package still loads on its own; arthur-margins owns the
+% scale and its \providecommand wins when the class pulls it in first.
+\providecommand{\arthurmarginsize}{\small}
+\providecommand{\arthurmargincaptionsize}{\footnotesize}
+
 \RequirePackage{etoolbox}
 \RequirePackage{xparse}
 \RequirePackage{tex/arthur-margins}
@@ -69,7 +74,7 @@
 % environment's italic and stop reading as a reference.
 \newcommand{\arthur@shortcite@text}[1]{%
   \normalfont
-  \footnotesize
+  \arthurmarginsize
   \raggedright
   \arthurfullref{#1}%
 }

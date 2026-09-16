@@ -25,6 +25,16 @@
 %% Provides: \arthurmarginnote[<left text>]{<text>}[<extra offset>]
 %%           \arthurmarginsep  — minimum gap between stacked items
 %%           \arthurmarginfoot — warn below this y coordinate on the page
+%%           \arthurmarginsize — type size for all margin prose
+%%           \arthurmargincaptionsize — type size for margin figure captions
+%%
+%% The margin carries a three-step type scale, set here so every consumer reads
+%% the same one: body text, then margin prose one step down, then margin figure
+%% captions one step below that. A reader scanning the page can tell the three
+%% ranks apart by size alone, and the caption sits visually inside the note it
+%% belongs to. Every margin consumer in this style — \marginnote, \shortcite,
+%% \marginkey, the notation environments and the marginfigure environment —
+%% takes its size from these two macros rather than choosing one locally.
 
 \RequirePackage{etoolbox}
 \RequirePackage{xparse}
@@ -43,6 +53,16 @@
 % fix is fewer or shorter items — so it warns instead. This is the y coordinate,
 % measured up from the foot of the paper, below which material is too low.
 \newlength{\arthurmarginfoot}
+
+% The margin type scale. \marginfont is marginnote's own hook and is empty by
+% default, which sets a note at body size; pointing it at \arthurmarginsize puts
+% every margin note one step below the body. \arthur@mn@measurebox applies
+% \marginfont when it measures a note, so the stacking arithmetic follows the
+% size automatically. A document that wants a different scale renews these two
+% in its preamble and every consumer moves together.
+\providecommand{\arthurmarginsize}{\small}
+\providecommand{\arthurmargincaptionsize}{\footnotesize}
+\renewcommand*{\marginfont}{\arthurmarginsize}
 
 \AtBeginDocument{%
   \ifdim\arthurmarginsep=\z@  \setlength{\arthurmarginsep}{0.7\baselineskip}\fi
