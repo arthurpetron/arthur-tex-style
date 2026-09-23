@@ -1,22 +1,47 @@
 % codynamic_mark.tikz.def
-\providecommand{\codynmark}[6]{% D,rings,w,g,split,bleed
+%
+% \codynmark{D}{rings}{w}{g}{split}{bleed}
+%   D      side of the square, in points
+%   rings  how many concentric rings
+%   w      ring line width
+%   g      gap between rings
+%   split  width of the vertical band, as a fraction of D
+%   bleed  how far the right-hand arcs reach back into the band, as a
+%          fraction of D at the outermost ring
+%
+% Order matters: the rings are drawn first, the band is punched through them
+% afterwards, and only then are the right-hand arcs laid back over the band
+% edge. Drawing the band first would put black on black, and drawing the arcs
+% before the band would put white on white — both were invisible.
+\providecommand{\codynmark}[6]{%
   \begin{tikzpicture}[x=1pt,y=1pt]
-    \fill[black] (0,0) rectangle (#1,#1);
     \pgfmathsetmacro{\R}{#1/2}
     \pgfmathsetmacro{\b}{#5*#1}
-    \pgfmathsetmacro{\bandx}{\R-\b/2}
-    \fill[black] (\bandx,0) rectangle (\bandx+\b,#1);
-    \pgfmathsetmacro{\r}{\R-#3/2}
-    \foreach \k in {1,...,#2}{
-      \draw[white, line width=#3] (\R,\R) circle[radius=\r];
-      \pgfmathsetmacro{\theta}{acos((\b/2)/\r)}
-      \pgfmathsetmacro{\delta}{min(#6*#1/\r,15)}
-      \draw[white, line width=#3]
-        ({\R+\r*cos(-\theta-\delta)},{\R+\r*sin(-\theta-\delta)})
-          arc[start angle={- \theta - \delta},
-              end angle={\theta+\delta},
-              radius=\r];
-      \pgfmathsetmacro{\r}{\r-(#3+#4)}
-    }
-  \end{tikzpicture}
+    \pgfmathsetmacro{\halfb}{\b/2}
+    \fill[black] (0,0) rectangle (#1,#1);
+    % Each radius is computed from the loop counter rather than accumulated:
+    % \foreach scopes its body, so a running \r is restored on every iteration
+    % and every ring lands on top of the first.
+    \foreach \k in {1,...,#2}{%
+      \pgfmathsetmacro{\r}{\R-#3/2-(\k-1)*(#3+#4)}%
+      \ifdim \r pt>0pt
+        \draw[white,line width=#3] (\R,\R) circle[radius=\r];
+      \fi
+    }%
+    \fill[black] (\R-\halfb,0) rectangle (\R+\halfb,#1);
+    \foreach \k in {1,...,#2}{%
+      \pgfmathsetmacro{\r}{\R-#3/2-(\k-1)*(#3+#4)}%
+      % A ring narrower than the band never meets it, and acos would be asked
+      % for a value outside [-1,1].
+      \ifdim \r pt>\halfb pt
+        \pgfmathsetmacro{\theta}{acos(\halfb/\r)}%
+        \pgfmathsetmacro{\delta}{min(#6*#1/\r,15)}%
+        \draw[white,line width=#3]
+          ({\R+\r*cos(-\theta-\delta)},{\R+\r*sin(-\theta-\delta)})
+            arc[start angle={-\theta-\delta},
+                end angle={\theta+\delta},
+                radius=\r];
+      \fi
+    }%
+  \end{tikzpicture}%
 }
