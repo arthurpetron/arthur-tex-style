@@ -53,6 +53,32 @@ Six layout bugs in `arthur-book.cls`, all visible in any document built with it.
   margin, scoped to `wide-notes` only so the symmetric presets keep the
   conventional alternation.
 
+### Fixed — the Codynamic mark
+
+`\codynmark` drew a black square with a single white circle in it, whatever
+arguments it was given. Three separate operations were dead, and each one hid
+the next.
+
+- **Every ring landed on the first one.** The radius was accumulated inside the
+  loop body, `\pgfmathsetmacro{\r}{\r-(#3+#4)}`, but `\foreach` scopes its
+  body, so `\r` was restored to its initial value on each iteration and all
+  `rings` circles were drawn at the same radius. The radius is now computed from
+  the loop counter, `\R-w/2-(k-1)(w+g)`, which needs no state to survive the
+  scope.
+- **The band was drawn black on black.** `\fill[black]` for the split ran
+  *before* the rings, over a square that was already black. The band is meant to
+  punch through the rings, so it is now filled after them.
+- **The bleed arcs were drawn white on white.** They were drawn immediately
+  after each full white circle, at the same radius and width, so they covered
+  nothing but themselves. They now come last, after the band, which is the only
+  order in which they do what their name says: reach back over the band edge so
+  the right-hand ring ends stay attached.
+
+Two guards were added with them. A ring whose radius has gone negative — easy to
+ask for, since `rings * (w + g)` can exceed `D/2` — is skipped instead of drawn
+inside out, and a ring narrower than the band is skipped rather than passed to
+`acos` outside `[-1,1]`.
+
 ### Fixed — margin citations
 
 `\shortcite` produced a margin entry in a hand-assembled title-then-author order
